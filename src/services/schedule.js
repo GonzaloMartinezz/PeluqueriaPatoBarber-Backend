@@ -195,4 +195,4 @@ async function bookAppointment({ date, startTime, service, who, paymentMethod, n
   }
 }
 
-module.exports = { getConfig, buildDays, bookAppointment, apptSummary };
+module.exports = { getConfig, buildDays, bookAppointment, apptSummary, hoursFor };
