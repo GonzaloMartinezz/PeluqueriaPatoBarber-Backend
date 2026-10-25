@@ -1,0 +1,13 @@
+# Dependencias y datos locales
+node_modules
+.data
+
+# CLAVES PRIVADAS: jamás se suben. Sin este archivo nadie puede descifrar .env
+.env.keys
+.env.local
+.env.*.local
+
+# El archivo .env SÍ se sube, pero solo si está cifrado (npm run secrets:check)
+
+npm-debug.log*
+.DS_Store
