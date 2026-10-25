@@ -9,6 +9,8 @@ const adminGuard = require('../middleware/adminGuard');
 const validate = require('../middleware/validate');
 const httpError = require('../utils/httpError');
 const { decrypt } = require('../utils/crypto');
+const { editableDay, editableWeek } = require('../services/hours');
+const { eraseUser } = require('../services/privacy');
 const { getConfig, buildDays, bookAppointment, apptSummary } = require('../services/schedule');
 const {
   isYMD,
@@ -59,6 +61,9 @@ router.get('/stats', async (req, res) => {
   const month = { from: startOfMonth(today), to: endOfMonth(today) };
   const seriesFrom = addDays(today, -29);
 
+  const cfg = await getConfig();
+  const legalComplete = !!(cfg.legal?.ownerName && cfg.legal?.cuit && cfg.legal?.address && cfg.legal?.email);
+
   const [day, week, monthStats, series, byPayment, topServices, totalClients, newClients] = await Promise.all([
     periodStats(today, today),
     periodStats(startOfWeek(today), endOfWeek(today)),
@@ -103,6 +108,7 @@ router.get('/stats', async (req, res) => {
     chart,
     byPayment: byPayment.map((p) => ({ method: p._id || 'Sin especificar', count: p.count, total: p.total })),
     topServices: topServices.map((s) => ({ name: s._id, count: s.count, total: s.total })),
+    legalComplete,
     registeredClients: totalClients,
     newClientsThisMonth: newClients,
   });
@@ -114,7 +120,14 @@ router.get('/stats', async (req, res) => {
 router.get('/slots', async (req, res) => {
   const { from, to } = range(req, 62);
   const config = await getConfig();
-  const days = await buildDays(from, to, { config, admin: true });
+  // Con serviceId, solo se marcan libres las franjas donde entra ese servicio (según su duración).
+  let duration = 0;
+  if (req.query.serviceId) {
+    const service = await Service.findById(req.query.serviceId).lean();
+    if (!service) throw httpError(404, 'Servicio no encontrado');
+    duration = service.duration;
+  }
+  const days = await buildDays(from, to, { config, duration, admin: true });
   res.json({ success: true, slotDuration: config.slotDuration, days });
 });
 
@@ -241,6 +254,15 @@ router.get('/clients', async (req, res) => {
   });
 });
 
+// Derecho de supresión pedido por el cliente (por email o en persona): borra su cuenta y sus datos.
+// Los turnos pasados se conservan sin datos personales.
+router.delete('/clients/:id', async (req, res) => {
+  const user = await User.findOne({ _id: req.params.id, role: ROLES.CLIENT });
+  if (!user) throw httpError(404, 'Cliente no encontrado');
+  await eraseUser(user._id);
+  res.json({ success: true });
+});
+
 router.patch('/clients/:id', async (req, res) => {
   const user = await User.findOne({ _id: req.params.id, role: ROLES.CLIENT });
   if (!user) throw httpError(404, 'Cliente no encontrado');
@@ -288,8 +310,16 @@ router.delete('/services/:id', async (req, res) => {
 
 /* ------------------------------ Configuración ----------------------------- */
 
+// El panel siempre recibe el horario en formato mañana / tarde (aunque en la base esté el formato viejo).
+const forAdmin = (config) => ({ ...config.toObject(), workingHours: editableWeek(config.workingHours) });
+
+const DAY_NAMES = {
+  monday: 'Lunes', tuesday: 'Martes', wednesday: 'Miércoles', thursday: 'Jueves',
+  friday: 'Viernes', saturday: 'Sábado', sunday: 'Domingo',
+};
+
 router.get('/config', async (req, res) => {
-  res.json({ success: true, config: await getConfig() });
+  res.json({ success: true, config: forAdmin(await getConfig()) });
 });
 
 router.put('/config', async (req, res) => {
@@ -302,17 +332,25 @@ router.put('/config', async (req, res) => {
 
   if (b.workingHours) {
     for (const day of DAY_KEYS) {
-      const h = b.workingHours[day];
-      if (!h) continue;
-      if (h.isOpen && (!isHHMM(h.open) || !isHHMM(h.close) || toMin(h.open) >= toMin(h.close))) {
-        throw httpError(400, 'Horario inválido: la apertura debe ser antes del cierre');
+      if (!b.workingHours[day]) continue;
+      const d = editableDay(b.workingHours[day]); // también acepta el formato viejo (un solo tramo)
+      const name = DAY_NAMES[day];
+
+      if (d.isOpen) {
+        const on = [['mañana', d.morning], ['tarde', d.afternoon]].filter(([, s]) => s.enabled);
+        if (!on.length) throw httpError(400, `${name}: activá el turno de mañana, el de tarde o los dos (o marcá el día como cerrado)`);
+        for (const [label, s] of on) {
+          if (!isHHMM(s.open) || !isHHMM(s.close)) throw httpError(400, `${name}, ${label}: horario inválido`);
+          if (toMin(s.open) >= toMin(s.close)) throw httpError(400, `${name}, ${label}: la apertura tiene que ser antes del cierre`);
+        }
+        if (d.morning.enabled && d.afternoon.enabled && toMin(d.morning.close) >= toMin(d.afternoon.open)) {
+          throw httpError(400, `${name}: la tarde tiene que empezar después de que termina la mañana`);
+        }
       }
-      config.workingHours[day] = {
-        isOpen: !!h.isOpen,
-        open: isHHMM(h.open) ? h.open : config.workingHours[day].open,
-        close: isHHMM(h.close) ? h.close : config.workingHours[day].close,
-      };
+
+      config.workingHours[day] = { isOpen: d.isOpen, morning: d.morning, afternoon: d.afternoon, open: undefined, close: undefined };
     }
+    config.markModified('workingHours');
   }
 
   if (Array.isArray(b.paymentMethods)) {
@@ -321,6 +359,29 @@ router.put('/config', async (req, res) => {
       .filter((p) => p.name);
     if (!methods.some((p) => p.enabled)) throw httpError(400, 'Dejá al menos un método de pago habilitado');
     config.paymentMethods = methods;
+  }
+
+  // Datos legales del responsable (se muestran en la Política de Privacidad y los Términos).
+  if (b.legal && typeof b.legal === 'object') {
+    const str = (v, max) => String(v ?? '').trim().slice(0, max);
+    const l = b.legal;
+    if (l.ownerName !== undefined) config.legal.ownerName = str(l.ownerName, 120);
+    if (l.address !== undefined) config.legal.address = str(l.address, 200);
+    if (l.email !== undefined) {
+      const email = str(l.email, 120).toLowerCase();
+      if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw httpError(400, 'El email de contacto no es válido');
+      config.legal.email = email;
+    }
+    if (l.cuit !== undefined) {
+      const d = String(l.cuit).replace(/\D/g, '');
+      if (d && d.length !== 11) throw httpError(400, 'El CUIT/CUIL debe tener 11 dígitos');
+      config.legal.cuit = d ? `${d.slice(0, 2)}-${d.slice(2, 10)}-${d.slice(10)}` : '';
+    }
+    if (l.cancellationHours !== undefined) {
+      const h = Number(l.cancellationHours);
+      if (!Number.isInteger(h) || h < 0 || h > 72) throw httpError(400, 'Las horas para cancelar deben ser un número entero entre 0 y 72');
+      config.legal.cancellationHours = h;
+    }
   }
 
   if (b.slotDuration !== undefined && Number(b.slotDuration) !== config.slotDuration) {
@@ -333,7 +394,7 @@ router.put('/config', async (req, res) => {
   if (b.maxDaysAhead !== undefined) config.maxDaysAhead = Number(b.maxDaysAhead);
 
   await config.save();
-  res.json({ success: true, config });
+  res.json({ success: true, config: forAdmin(config) });
 });
 
 /* -------------------- Días cerrados / horarios especiales ------------------ */

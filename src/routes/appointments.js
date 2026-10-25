@@ -6,7 +6,7 @@ const auth = require('../middleware/auth');
 const validate = require('../middleware/validate');
 const httpError = require('../utils/httpError');
 const { getConfig, buildDays, bookAppointment } = require('../services/schedule');
-const { isYMD, daysBetween, todayYMD, nowMinutes, toMin } = require('../utils/time');
+const { isYMD, daysBetween, todayYMD, nowMinutes, toMin, toInstant } = require('../utils/time');
 
 const router = express.Router();
 router.use(auth);
@@ -77,6 +77,12 @@ router.patch('/:id/cancel', async (req, res) => {
   const today = todayYMD();
   if (appointment.date < today || (appointment.date === today && toMin(appointment.startTime) <= nowMinutes())) {
     throw httpError(400, 'No se puede cancelar un turno que ya empezó');
+  }
+  // Anticipación mínima para cancelar online (la define el barbero y figura en los Términos).
+  const config = await getConfig();
+  const hours = config.legal?.cancellationHours || 0;
+  if (hours > 0 && toInstant(appointment.date, appointment.startTime) - Date.now() < hours * 3600 * 1000) {
+    throw httpError(400, `Online solo se puede cancelar hasta ${hours} hs antes del turno. Comunicate con la peluquería${config.phone ? ` al ${config.phone}` : ''}.`);
   }
   appointment.status = 'cancelled';
   await appointment.save();

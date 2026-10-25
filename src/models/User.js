@@ -64,6 +64,14 @@ const userSchema = new mongoose.Schema(
     lastLoginAt: {
       type: Date,
     },
+    // Aceptación de Términos y Política de Privacidad (cuándo y qué versión).
+    consentAt: { type: Date },
+    consentVersion: { type: String },
+    // Cambiar o restablecer la contraseña cierra todas las sesiones anteriores a esta fecha.
+    passwordChangedAt: { type: Date },
+    // Recuperación de contraseña: solo se guarda el hash del enlace, y vence en 30 minutos.
+    resetTokenHash: { type: String, select: false },
+    resetExpiresAt: { type: Date, select: false },
   },
   {
     timestamps: true,

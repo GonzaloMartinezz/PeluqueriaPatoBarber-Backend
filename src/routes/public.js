@@ -3,6 +3,7 @@ const Service = require('../models/Service');
 const Availability = require('../models/Availability');
 const { getConfig, hoursFor } = require('../services/schedule');
 const { todayYMD, nowMinutes, toMin } = require('../utils/time');
+const { publicWeek } = require('../services/hours');
 
 const router = express.Router();
 
@@ -14,8 +15,19 @@ router.get('/config', async (req, res) => {
   const date = todayYMD();
   const h = hoursFor(date, c, await Availability.findOne({ date }).lean());
   const now = nowMinutes();
-  const today = { date, isOpen: h.isOpen, open: h.open || null, close: h.close || null, reason: h.reason || '' };
-  today.status = !h.isOpen ? 'closed' : now < toMin(h.open) ? 'later' : now < toMin(h.close) ? 'open' : 'ended';
+  // Con horario cortado: "open" si estamos dentro de un turno, "later" si falta que abra el próximo
+  // (incluye el descanso del mediodía), "ended" si ya pasó el último.
+  const current = h.shifts.find((s) => now >= toMin(s.open) && now < toMin(s.close));
+  const next = h.shifts.find((s) => now < toMin(s.open));
+  const today = {
+    date,
+    isOpen: h.isOpen,
+    open: (current || next)?.open || null,
+    close: current?.close || null,
+    shifts: h.shifts,
+    reason: h.reason || '',
+    status: !h.isOpen ? 'closed' : current ? 'open' : next ? 'later' : 'ended',
+  };
 
   res.json({
     success: true,
@@ -25,10 +37,17 @@ router.get('/config', async (req, res) => {
       address: c.address,
       phone: c.phone,
       instagram: c.instagram,
-      workingHours: c.workingHours,
+      workingHours: publicWeek(c.workingHours),
       slotDuration: c.slotDuration,
       maxDaysAhead: c.maxDaysAhead,
       paymentMethods: c.paymentMethods.filter((p) => p.enabled).map((p) => p.name),
+      legal: {
+        ownerName: c.legal?.ownerName || '',
+        cuit: c.legal?.cuit || '',
+        address: c.legal?.address || '',
+        email: c.legal?.email || '',
+        cancellationHours: c.legal?.cancellationHours || 0,
+      },
       today,
     },
   });

@@ -3,7 +3,7 @@ const { COOKIE_NAME, csrfFor, safeEqual } = require('../utils/session');
 
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 // Antes de iniciar sesión no hay token: ahí solo se valida el origen.
-const NO_TOKEN_PATHS = new Set(['/api/auth/login', '/api/auth/register', '/api/auth/google']);
+const NO_TOKEN_PATHS = new Set(['/api/auth/login', '/api/auth/register', '/api/auth/google', '/api/auth/forgot', '/api/auth/reset']);
 
 const forbidden = (res, message) => res.status(403).json({ success: false, message });
 

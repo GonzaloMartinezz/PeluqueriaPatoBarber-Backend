@@ -16,6 +16,11 @@ const auth = async (req, res, next) => {
       return res.status(401).json({ success: false, message: 'Cuenta no encontrada o deshabilitada' });
     }
 
+    // Si cambió o se restableció la contraseña (o se cerraron todas las sesiones), los tokens anteriores dejan de servir.
+    if (user.passwordChangedAt && Math.floor(user.passwordChangedAt.getTime() / 1000) > decoded.iat) {
+      return res.status(401).json({ success: false, message: 'Sesión vencida, volvé a ingresar' });
+    }
+
     req.user = user;
     req.sessionToken = token;
     next();

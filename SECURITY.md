@@ -96,3 +96,23 @@ Además, activá en MongoDB Atlas el cifrado en reposo (viene activado por defec
 - [ ] Cambiaste la contraseña del admin y `GOOGLE_CLIENT_ID` tiene tu dominio autorizado.
 - [ ] `npm audit --omit=dev` sin vulnerabilidades altas.
 - [ ] En Atlas: usuario con permisos mínimos, acceso solo desde las IP del servidor, backups activos.
+
+## Privacidad y cuentas (Ley 25.326)
+
+- **Consentimiento**: para crear una cuenta hay que aceptar los Términos y la Política de Privacidad. Se guarda cuándo y qué versión (`consentAt`, `consentVersion`; versión actual en `LEGAL_VERSION`, `src/config/constants.js`). Si cambiás los textos, subí esa versión (y la del front en `client/src/lib/legal.js`).
+- **Acceso**: `GET /api/auth/me/export` descarga todos los datos de la persona en JSON (botón en *Mi cuenta*).
+- **Rectificación**: la persona edita nombre, apellido y teléfono en *Mi cuenta*.
+- **Supresión**: `DELETE /api/auth/me` (o *Eliminar datos* en Clientes del panel admin) borra la cuenta; los turnos pasados quedan anónimos (sin nombre, teléfono ni notas) porque forman parte de la contabilidad.
+- **Recuperar contraseña**: enlace de un solo uso que vale 30 minutos; solo se guarda su hash. La respuesta es siempre la misma exista o no el email. Requiere SMTP (ver `DEPLOY.md`).
+- **Sesiones revocables**: al cambiar o restablecer la contraseña, o con *Cerrar sesión en todos lados*, las sesiones anteriores dejan de valer (`passwordChangedAt` vs. `iat` del JWT).
+- **Política de cancelación**: el administrador define las horas mínimas para cancelar online; el servidor la hace cumplir.
+- **Mínimo de datos**: no se guardan tarjetas; el mapa de Google y las fuentes no cargan de terceros salvo que la persona pida el mapa.
+
+## Copias de seguridad cifradas
+
+```bash
+npm run backup                 # crea backups/pato-barber-AAAA-MM-DD_HH-MM.enc (AES-256-GCM, misma ENCRYPTION_KEY)
+npm run restore -- backups/archivo.enc     # restaura (pide confirmación; --yes la omite)
+```
+`backups/` está en `.gitignore`. Guardá las copias fuera del servidor (Drive, disco externo) y probá restaurar de vez en cuando.
+Sin `ENCRYPTION_KEY` una copia no se puede abrir: guardala aparte, junto con `.env.keys`.

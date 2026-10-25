@@ -8,7 +8,9 @@
     "dev": "nodemon src/index.js",
     "encrypt:backfill": "node scripts/encrypt-existing.js",
     "secrets:check": "node scripts/check-secrets.js",
-    "audit:prod": "npm audit --omit=dev"
+    "audit:prod": "npm audit --omit=dev",
+    "backup": "node scripts/backup.js",
+    "restore": "node scripts/restore.js"
   },
   "keywords": [],
   "author": "",
@@ -26,7 +28,8 @@
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.6.1",
-    "morgan": "^1.10.1"
+    "morgan": "^1.10.1",
+    "nodemailer": "^10.2.1"
   },
   "devDependencies": {
     "mongodb-memory-server": "^11.3.0",

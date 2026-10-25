@@ -1,9 +1,15 @@
 const mongoose = require('mongoose');
 
+const shift = { enabled: { type: Boolean }, open: { type: String }, close: { type: String }, _id: false };
+
+// morning / afternoon: horario cortado. open / close son del formato viejo (un solo tramo)
+// y se migran solos al arrancar (ver config/seed.js).
 const dayHours = {
-  isOpen: { type: Boolean, default: true },
-  open: { type: String, default: '09:00' },
-  close: { type: String, default: '20:00' },
+  isOpen: { type: Boolean, default: false },
+  morning: shift,
+  afternoon: shift,
+  open: { type: String },
+  close: { type: String },
 };
 
 const businessConfigSchema = new mongoose.Schema(
@@ -44,6 +50,14 @@ const businessConfigSchema = new mongoose.Schema(
         _id: false,
       },
     ],
+    // Datos del responsable que aparecen en la Política de Privacidad y los Términos.
+    legal: {
+      ownerName: { type: String, default: '', trim: true, maxlength: 120 }, // titular / razón social
+      cuit: { type: String, default: '', trim: true },
+      address: { type: String, default: '', trim: true, maxlength: 200 }, // domicilio legal
+      email: { type: String, default: '', trim: true, maxlength: 120 }, // contacto para consultas de privacidad
+      cancellationHours: { type: Number, default: 0, min: 0, max: 72 }, // 0 = se puede cancelar hasta la hora del turno
+    },
     slotDuration: {
       type: Number,
       default: 30,

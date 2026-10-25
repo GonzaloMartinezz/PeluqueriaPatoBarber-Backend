@@ -37,6 +37,11 @@ function validateEnv() {
     }
   }
 
+  // Sin SMTP la app funciona, pero "Olvidé mi contraseña" no puede mandar el email.
+  if (prod && !(process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS)) {
+    console.warn('Aviso: SMTP sin configurar. Los clientes no podrán recuperar su contraseña por email (ver DEPLOY.md).');
+  }
+
   if (errors.length) {
     console.error('Configuración insegura o incompleta:\n - ' + errors.join('\n - '));
     process.exit(1);

@@ -63,8 +63,20 @@ const loginLimiter = rateLimit({
   keyGenerator: (req) => `${ipKeyGenerator(req.ip)}|${String(req.body?.email || '').toLowerCase().slice(0, 120)}`,
 });
 const loginIpLimiter = rateLimit({ ...limiterOptions, windowMs: 15 * 60 * 1000, limit: 40, skipSuccessfulRequests: true });
-const registerLimiter = rateLimit({ ...limiterOptions, windowMs: 60 * 60 * 1000, limit: 15 });
+const registerLimiter = rateLimit({ ...limiterOptions, windowMs: 60 * 60 * 1000, limit: Number(process.env.REGISTER_LIMIT) || 15 });
 
+const byIpAndEmail = (req) => `${ipKeyGenerator(req.ip)}|${String(req.body?.email || '').toLowerCase().slice(0, 120)}`;
+// Recuperar contraseña: pocos pedidos por hora (evita llenar de emails a alguien).
+const forgotLimiter = rateLimit({ ...limiterOptions, windowMs: 60 * 60 * 1000, limit: 5, keyGenerator: byIpAndEmail });
+const resetLimiter = rateLimit({ ...limiterOptions, windowMs: 60 * 60 * 1000, limit: 10 });
+// Cambiar contraseña, descargar o eliminar la cuenta.
+const sensitiveLimiter = rateLimit({ ...limiterOptions, windowMs: 60 * 60 * 1000, limit: 20 });
+
+app.post('/api/auth/forgot', forgotLimiter);
+app.post('/api/auth/reset', resetLimiter);
+app.post('/api/auth/password', sensitiveLimiter);
+app.get('/api/auth/me/export', sensitiveLimiter);
+app.delete('/api/auth/me', sensitiveLimiter);
 app.post(['/api/auth/login', '/api/auth/google'], loginIpLimiter, loginLimiter);
 app.post('/api/auth/register', registerLimiter);
 app.use('/api/auth', authRoutes);

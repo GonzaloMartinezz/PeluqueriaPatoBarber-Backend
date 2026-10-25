@@ -3,6 +3,7 @@ const Availability = require('../models/Availability');
 const Appointment = require('../models/Appointment');
 const httpError = require('../utils/httpError');
 const { decrypt } = require('../utils/crypto');
+const { shiftsOf } = require('./hours');
 const {
   DEFAULT_WORKING_HOURS,
   DEFAULT_PAYMENT_METHODS,
@@ -32,19 +33,16 @@ async function getConfig() {
 // Horario efectivo de un día: excepción (cerrado / especial) o horario semanal.
 function hoursFor(date, config, exception) {
   if (exception && exception.type === 'blocked') {
-    return { isOpen: false, reason: exception.reason || 'Cerrado' };
+    return { isOpen: false, shifts: [], reason: exception.reason || 'Cerrado' };
   }
+  // Horario especial de un día: un solo tramo.
   if (exception && exception.type === 'custom' && exception.customHours?.open && exception.customHours?.close) {
-    return {
-      isOpen: true,
-      open: exception.customHours.open,
-      close: exception.customHours.close,
-      reason: exception.reason || 'Horario especial',
-    };
+    const { open, close } = exception.customHours;
+    return { isOpen: true, shifts: [{ open, close }], open, close, reason: exception.reason || 'Horario especial' };
   }
-  const weekly = config.workingHours?.[weekdayKey(date)];
-  if (!weekly || !weekly.isOpen) return { isOpen: false, reason: 'Cerrado' };
-  return { isOpen: true, open: weekly.open, close: weekly.close };
+  const shifts = shiftsOf(config.workingHours?.[weekdayKey(date)]);
+  if (!shifts.length) return { isOpen: false, shifts: [], reason: 'Cerrado' };
+  return { isOpen: true, shifts, open: shifts[0].open, close: shifts[shifts.length - 1].close };
 }
 
 function apptSummary(a) {
@@ -101,6 +99,7 @@ async function buildDays(from, to, { config, duration = 0, admin = false }) {
       reason: hours.reason || '',
       open: hours.open || null,
       close: hours.close || null,
+      shifts: hours.shifts,
       appointments: admin ? dayAppts.map(apptSummary) : undefined,
     };
 
@@ -109,14 +108,17 @@ async function buildDays(from, to, { config, duration = 0, admin = false }) {
     const busyBySlot = new Map();
     for (const a of dayAppts) for (const t of a.slots) busyBySlot.set(t, a);
 
+    // Las franjas se generan por turno: en el descanso del mediodía no hay horarios.
     const mins = [];
-    for (let m = toMin(hours.open); m + step <= toMin(hours.close); m += step) mins.push(m);
+    hours.shifts.forEach((sh, shift) => {
+      for (let m = toMin(sh.open); m + step <= toMin(sh.close); m += step) mins.push({ m, shift });
+    });
 
     // Primera pasada: estado de cada franja por separado.
-    const slots = mins.map((m) => {
+    const slots = mins.map(({ m, shift }) => {
       const time = toHHMM(m);
       if (busyBySlot.has(time)) {
-        const slot = { time, status: 'busy' };
+        const slot = { time, min: m, shift, status: 'busy' };
         if (admin) {
           const a = busyBySlot.get(time);
           slot.appointment = { ...apptSummary(a), first: a.slots[0] === time };
@@ -127,7 +129,7 @@ async function buildDays(from, to, { config, duration = 0, admin = false }) {
       // (clientes que llegan en el momento).
       const past = date < today || (date === today && m + (admin ? step : 0) <= nowMin);
       const outOfRange = !admin && date > lastBookable;
-      return { time, status: past || outOfRange ? 'unavailable' : 'free' };
+      return { time, min: m, shift, status: past || outOfRange ? 'unavailable' : 'free' };
     });
 
     // Segunda pasada: un servicio de varias franjas necesita franjas libres seguidas.
@@ -136,7 +138,8 @@ async function buildDays(from, to, { config, duration = 0, admin = false }) {
         if (slot.status !== 'free') return;
         for (let k = 1; k < needed; k++) {
           const next = slots[i + k];
-          if (!next || next.status === 'busy' || (next.status === 'unavailable' && !admin)) {
+          // La franja siguiente tiene que ser contigua: un turno largo no puede cruzar el descanso.
+          if (!next || next.min !== slot.min + k * step || next.status === 'busy' || (next.status === 'unavailable' && !admin)) {
             slot.status = 'unavailable';
             return;
           }
