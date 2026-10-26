@@ -38,6 +38,7 @@ router.get('/config', async (req, res) => {
       phone: c.phone,
       instagram: c.instagram,
       reels: c.reels || [],
+      googleReviewUrl: c.googleReviewUrl || '',
       workingHours: publicWeek(c.workingHours),
       slotDuration: c.slotDuration,
       maxDaysAhead: c.maxDaysAhead,

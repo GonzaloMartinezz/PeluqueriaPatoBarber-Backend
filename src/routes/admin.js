@@ -353,6 +353,14 @@ router.put('/config', async (req, res) => {
     config.markModified('workingHours');
   }
 
+  if (typeof b.googleReviewUrl === 'string') {
+    const url = b.googleReviewUrl.trim();
+    if (url && !/^https:\/\/((www\.|search\.)?google\.[a-z.]+|maps\.app\.goo\.gl|g\.page|g\.co|goo\.gl)\//i.test(url)) {
+      throw httpError(400, 'El enlace de reseñas tiene que ser de Google (Google Maps)');
+    }
+    config.googleReviewUrl = url.slice(0, 500);
+  }
+
   if (Array.isArray(b.reels)) {
     const reels = [...new Set(b.reels.map((u) => String(u).trim().split('?')[0]).filter(Boolean))];
     if (reels.length > 6) throw httpError(400, 'Podés mostrar hasta 6 reels');

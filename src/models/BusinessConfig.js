@@ -32,6 +32,8 @@ const businessConfigSchema = new mongoose.Schema(
     },
     // Enlaces de reels/publicaciones de Instagram que se muestran en la portada (máx. 6).
     reels: { type: [String], default: [] },
+    // Enlace para dejar una reseña en Google Maps (opcional; si falta se usa una búsqueda del local).
+    googleReviewUrl: { type: String, default: '' },
     instagram: {
       type: String,
       default: '',
