@@ -34,6 +34,7 @@ const businessConfigSchema = new mongoose.Schema(
     reels: { type: [String], default: [] },
     // Enlace para dejar una reseña en Google Maps (opcional; si falta se usa una búsqueda del local).
     googleReviewUrl: { type: String, default: '' },
+    tiktok: { type: String, default: '' },
     instagram: {
       type: String,
       default: '',

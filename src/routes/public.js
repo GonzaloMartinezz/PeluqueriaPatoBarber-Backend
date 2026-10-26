@@ -37,6 +37,7 @@ router.get('/config', async (req, res) => {
       address: c.address,
       phone: c.phone,
       instagram: c.instagram,
+      tiktok: c.tiktok || '',
       reels: c.reels || [],
       googleReviewUrl: c.googleReviewUrl || '',
       workingHours: publicWeek(c.workingHours),

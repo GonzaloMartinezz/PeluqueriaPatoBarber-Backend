@@ -326,7 +326,7 @@ router.put('/config', async (req, res) => {
   const config = await getConfig();
   const b = req.body;
 
-  for (const k of ['name', 'barberName', 'address', 'phone', 'instagram']) {
+  for (const k of ['name', 'barberName', 'address', 'phone', 'instagram', 'tiktok']) {
     if (typeof b[k] === 'string') config[k] = b[k].trim();
   }
 

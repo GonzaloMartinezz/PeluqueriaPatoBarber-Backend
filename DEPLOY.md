@@ -42,3 +42,17 @@ Luego completá los *Datos legales* en el panel (ver `LEGAL.md`).
 - Semanal: `npm run backup` y guardá el archivo fuera del servidor.
 - Actualizá dependencias con `npm audit` / `npm update` de vez en cuando.
 - Si sospechás que se filtró una clave: cambiá `JWT_SECRET` (cierra todas las sesiones) y la contraseña del admin.
+
+## Front en Vercel + API en Render (muy importante)
+Si en la web publicada no aparecen servicios ni horarios y en la consola ves `GET /api/config 404`, el front está pidiendo la API a su propio dominio. Hay dos formas de conectarlos:
+
+**A) Proxy `/api` en Vercel (recomendada: la cookie de sesión queda en el mismo dominio).** En `client/vercel.json` agregá, antes de la regla existente:
+```json
+{ "source": "/api/:path*", "destination": "https://TU-API.onrender.com/api/:path*" }
+```
+En Render: `CLIENT_URL=https://tu-front.vercel.app`, `NODE_ENV=production`, `TRUST_PROXY=1`. No definas `VITE_API_URL` en Vercel.
+
+**B) API directa.** En Vercel → Settings → Environment Variables: `VITE_API_URL=https://TU-API.onrender.com/api` y volvé a desplegar (la política de seguridad toma ese dominio al compilar). En Render agregá `COOKIE_SAMESITE=none` y `CLIENT_URL=https://tu-front.vercel.app`. Algunos navegadores bloquean cookies entre dominios distintos, por eso se recomienda la opción A.
+
+En ambos casos probá: `https://TU-API.onrender.com/api/config` debe devolver un JSON con los horarios.
+Además, en Vercel el *Root Directory* del proyecto es `client`.
