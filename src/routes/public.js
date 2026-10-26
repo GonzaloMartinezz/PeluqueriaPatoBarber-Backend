@@ -4,6 +4,7 @@ const Availability = require('../models/Availability');
 const { getConfig, hoursFor } = require('../services/schedule');
 const { todayYMD, nowMinutes, toMin } = require('../utils/time');
 const { publicWeek } = require('../services/hours');
+const { getReel } = require('../services/reels');
 
 const router = express.Router();
 
@@ -59,6 +60,29 @@ router.get('/config', async (req, res) => {
 router.get('/services', async (req, res) => {
   const services = await Service.find({ isActive: true }).sort({ order: 1, createdAt: 1 });
   res.json({ success: true, services });
+});
+
+// Reels configurados con su portada (la imagen se sirve desde acá, no desde Instagram).
+router.get('/reels', async (req, res) => {
+  const c = await getConfig();
+  const urls = (c.reels || []).slice(0, 6);
+  const items = await Promise.all(
+    urls.map(async (url, i) => {
+      const r = await getReel(url);
+      return { url, title: r.ok ? r.title : '', thumb: r.ok ? `/api/reels/${i}/thumb` : '' };
+    })
+  );
+  res.set('Cache-Control', 'public, max-age=600');
+  res.json({ success: true, reels: items });
+});
+
+router.get('/reels/:i/thumb', async (req, res) => {
+  const c = await getConfig();
+  const url = (c.reels || []).slice(0, 6)[Number(req.params.i)];
+  const r = url ? await getReel(url) : null;
+  if (!r?.ok) return res.status(404).end();
+  res.set({ 'Content-Type': r.type, 'Cache-Control': 'public, max-age=86400', 'Cross-Origin-Resource-Policy': 'cross-origin' });
+  res.send(r.buf);
 });
 
 module.exports = router;
