@@ -30,6 +30,8 @@ const businessConfigSchema = new mongoose.Schema(
       type: String,
       default: '',
     },
+    // Enlaces de reels/publicaciones de Instagram que se muestran en la portada (máx. 6).
+    reels: { type: [String], default: [] },
     instagram: {
       type: String,
       default: '',

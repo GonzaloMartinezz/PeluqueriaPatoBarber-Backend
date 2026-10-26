@@ -37,6 +37,7 @@ router.get('/config', async (req, res) => {
       address: c.address,
       phone: c.phone,
       instagram: c.instagram,
+      reels: c.reels || [],
       workingHours: publicWeek(c.workingHours),
       slotDuration: c.slotDuration,
       maxDaysAhead: c.maxDaysAhead,

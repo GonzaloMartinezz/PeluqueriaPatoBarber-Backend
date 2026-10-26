@@ -353,6 +353,15 @@ router.put('/config', async (req, res) => {
     config.markModified('workingHours');
   }
 
+  if (Array.isArray(b.reels)) {
+    const reels = [...new Set(b.reels.map((u) => String(u).trim().split('?')[0]).filter(Boolean))];
+    if (reels.length > 6) throw httpError(400, 'Podés mostrar hasta 6 reels');
+    const ok = /^https:\/\/(www\.)?instagram\.com\/(?:[\w.]+\/)?(reel|reels|p)\/[\w-]+\/?$/;
+    const bad = reels.find((u) => !ok.test(u));
+    if (bad) throw httpError(400, `Este enlace no es un reel de Instagram: ${bad.slice(0, 60)}`);
+    config.reels = reels;
+  }
+
   if (Array.isArray(b.paymentMethods)) {
     const methods = b.paymentMethods
       .map((p) => ({ name: String(p.name || '').trim(), enabled: !!p.enabled }))
